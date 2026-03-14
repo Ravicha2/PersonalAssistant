@@ -6,6 +6,8 @@ import type { McpClientInterface, McpTool } from './mcp.js';
 import type { ServerMessage } from './types.js';
 import { getAdapter, DEFAULT_MODELS, type LLMOptions, type UnifiedTool } from './llm/index.js';
 
+export let chatHistory: unknown[] = [];
+
 function buildSystemPrompt(context?: ContextPayload, toolSummary = ''): string {
   const base = `You are a helpful personal assistant for students. You have access to the user's browser context (open tabs as markdown) when provided.
 
@@ -92,7 +94,7 @@ export async function runChatStream(
   }
 
   const adapter = getAdapter(provider);
-  let messages: unknown[] = [{ role: 'user' as const, content: message }];
+  let messages: unknown[] = [...chatHistory, { role: 'user' as const, content: message }];
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
   let turnsLeft = config.maxToolTurns;
@@ -115,6 +117,7 @@ export async function runChatStream(
     }
 
     if (result.toolUses.length === 0) {
+      chatHistory = [...messages];
       send({
         type: 'done',
         usage: { input_tokens: totalInputTokens, output_tokens: totalOutputTokens },
@@ -139,6 +142,7 @@ export async function runChatStream(
     turnsLeft--;
   }
 
+  chatHistory = [...messages];
   send({
     type: 'done',
     usage: { input_tokens: totalInputTokens, output_tokens: totalOutputTokens },
