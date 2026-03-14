@@ -20,13 +20,13 @@ export interface McpClientInterface {
 const CALENDAR_TOOLS: McpTool[] = [
   {
     name: 'create_calendar_event',
-    description: 'Create a new event on the user\'s Google Calendar. Use ISO 8601 for start and end (e.g. 2025-03-15T14:00:00Z).',
+    description: 'Create a new event on the user\'s Google Calendar. Pass start and end in ISO 8601 UTC (e.g. 2026-03-13T16:55:00Z). The server converts to the user\'s timezone. If the user does not specify duration, use 1 hour. endTime must be after startTime.',
     inputSchema: {
       type: 'object',
       properties: {
         summary: { type: 'string', description: 'Event title' },
-        startTime: { type: 'string', description: 'Start datetime ISO 8601' },
-        endTime: { type: 'string', description: 'End datetime ISO 8601' },
+        startTime: { type: 'string', description: 'Start datetime ISO 8601 UTC (e.g. 2026-03-13T16:55:00Z)' },
+        endTime: { type: 'string', description: 'End datetime ISO 8601 UTC; must be after startTime' },
         description: { type: 'string', description: 'Optional event description' },
       },
       required: ['summary', 'startTime', 'endTime'],

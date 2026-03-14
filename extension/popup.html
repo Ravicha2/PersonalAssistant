@@ -75,10 +75,13 @@
     <div id="chat-view" class="chat-area">
       <div id="messages" class="messages"></div>
       <div class="input-row">
-        <label class="context-toggle">
-          <input type="checkbox" id="include-context" checked />
-          Include tab context
-        </label>
+        <div class="input-row-top">
+          <label class="context-toggle">
+            <input type="checkbox" id="include-context" checked />
+            Include tab context
+          </label>
+          <button type="button" id="clear-chat-btn" class="clear-chat-btn" title="Clear chat history">Clear chat</button>
+        </div>
         <div class="connectors-info" id="connectors-info" title="Tools (connectors) come from MCP servers configured in the backend">
           <span class="connectors-label">Tools</span>
           <span class="connectors-detail" id="connectors-detail">Demo (echo, add)</span>

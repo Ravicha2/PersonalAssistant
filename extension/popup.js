@@ -35,8 +35,22 @@
   const connectApiKey = document.getElementById('connect-api-key');
   const connectSubmit = document.getElementById('connect-submit');
   const connectCancel = document.getElementById('connect-cancel');
+  const clearChatBtn = document.getElementById('clear-chat-btn');
 
   const DEFAULT_MODELS = { claude: 'claude-sonnet-4-20250514', openai: 'gpt-4o-mini', groq: 'llama-3.3-70b-versatile' };
+  const CHAT_HISTORY_KEY = 'chatHistory';
+  const MAX_CHAT_ITEMS = 200;
+
+  async function getStoredChatHistory() {
+    const out = await chrome.storage.local.get(CHAT_HISTORY_KEY);
+    const raw = out[CHAT_HISTORY_KEY];
+    return Array.isArray(raw) ? raw : [];
+  }
+
+  async function setStoredChatHistory(history) {
+    const trimmed = history.length > MAX_CHAT_ITEMS ? history.slice(-MAX_CHAT_ITEMS) : history;
+    await chrome.storage.local.set({ [CHAT_HISTORY_KEY]: trimmed });
+  }
 
   function setStatus(text, isError = false) {
     statusEl.textContent = text;
@@ -69,6 +83,27 @@
     wrap.appendChild(bubble);
     messagesEl.appendChild(wrap);
     messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  function renderHistoryItem(item) {
+    if (item.role === 'user') {
+      appendMessage('user', item.content);
+    } else if (item.role === 'assistant') {
+      appendMessage('assistant', item.content || '');
+    }
+  }
+
+  async function loadChatHistory() {
+    const history = await getStoredChatHistory();
+    messagesEl.innerHTML = '';
+    history.forEach(renderHistoryItem);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  async function persistMessage(role, content) {
+    const history = await getStoredChatHistory();
+    history.push({ role, content });
+    await setStoredChatHistory(history);
   }
 
   async function getStoredSettings() {
@@ -112,6 +147,7 @@
     }
     authView.classList.add('hidden');
     chatView.classList.remove('hidden');
+    loadChatHistory();
     if (s.user) {
       userLabel.textContent = s.user.email;
       connectorsBtn.classList.remove('hidden');
@@ -292,6 +328,12 @@
     }
   }
 
+  clearChatBtn.addEventListener('click', async () => {
+    await setStoredChatHistory([]);
+    messagesEl.innerHTML = '';
+    setStatus('Chat cleared.');
+  });
+
   sendBtn.addEventListener('click', sendMessage);
   inputEl.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -344,6 +386,7 @@
     inputEl.value = '';
     sendBtn.disabled = true;
     appendMessage('user', text);
+    persistMessage('user', text);
 
     let context = { tabs: [], closed_tabs: [] };
     if (includeContextEl.checked) {
@@ -399,7 +442,10 @@
           if (currentBubble) currentBubble.textContent += '\n[Tool result received]';
         }
         if (msg.type === 'done') {
-          if (currentBubble) currentBubble.dataset.streaming = '';
+          if (currentBubble) {
+            currentBubble.dataset.streaming = '';
+            persistMessage('assistant', currentBubble.textContent);
+          }
           setStatus(msg.usage ? `Done. Tokens: ${msg.usage.input_tokens + msg.usage.output_tokens}` : 'Done.');
         }
       } catch (e) {

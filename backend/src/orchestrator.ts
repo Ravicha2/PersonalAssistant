@@ -1,11 +1,13 @@
 import { config } from './config.js';
+
+const CALENDAR_TZ = config.calendarTimezone;
 import type { ContextPayload } from './types.js';
 import type { McpClientInterface, McpTool } from './mcp.js';
 import type { ServerMessage } from './types.js';
 import { getAdapter, DEFAULT_MODELS, type LLMOptions, type UnifiedTool } from './llm/index.js';
 
 function buildSystemPrompt(context?: ContextPayload): string {
-  const base = `You are a helpful personal assistant. You have access to the user's browser context (open tabs as markdown) when provided. When the user has connected Google, you can create and list calendar events using the create_calendar_event and list_calendar_events tools. Use ISO 8601 for event times (e.g. 2025-03-15T14:00:00Z). Be concise and accurate.`;
+  const base = `You are a helpful personal assistant. You have access to the user's browser context (open tabs as markdown) when provided. When the user has connected Google, you can create and list calendar events using the create_calendar_event and list_calendar_events tools. The user's calendar timezone is ${CALENDAR_TZ}. When the user gives a date and time (e.g. "Friday 13 March 2026 23:55" or "tomorrow at 2pm"), convert that to UTC and pass ISO 8601 with Z for startTime and endTime (e.g. 2026-03-13T16:55:00Z for 23:55 in ${CALENDAR_TZ}). If the user does not specify event length, use 1 hour. Be concise and accurate.`;
   if (!context?.tabs?.length && !context?.closed_tabs?.length) return base;
   const parts = [base];
   if (context.tabs?.length) {

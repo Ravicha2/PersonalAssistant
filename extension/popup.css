@@ -263,15 +263,37 @@ body {
   border-top: 1px solid #e5e5e5;
   background: #fff;
 }
-.context-toggle {
-  display: block;
+.input-row .input-row-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+.context-toggle {
+  display: flex;
+  align-items: center;
+  margin: 0;
   font-size: 12px;
   color: #666;
   cursor: pointer;
 }
 .context-toggle input {
   margin-right: 6px;
+}
+.clear-chat-btn {
+  margin-left: auto;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: #666;
+  background: none;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.clear-chat-btn:hover {
+  background: #f5f5f5;
+  color: #333;
 }
 .connectors-info {
   display: flex;

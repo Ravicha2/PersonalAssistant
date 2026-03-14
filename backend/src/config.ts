@@ -18,4 +18,6 @@ export const config = {
   googleClientId: process.env.GOOGLE_CLIENT_ID ?? '',
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
   googleRedirectUri: process.env.GOOGLE_REDIRECT_URI ?? '',
+  /** Timezone for calendar events (e.g. Asia/Jakarta). Events are created in this timezone so "23:55" stays 23:55 for the user. */
+  calendarTimezone: process.env.CALENDAR_TIMEZONE ?? 'Asia/Jakarta',
 } as const;

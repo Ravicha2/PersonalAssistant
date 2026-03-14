@@ -2,6 +2,7 @@ import { google } from 'googleapis';
 import { config } from './config.js';
 
 const SCOPES = ['https://www.googleapis.com/auth/calendar'];
+const DEFAULT_DURATION_MS = 60 * 60 * 1000; // 1 hour if end <= start
 
 function getOAuth2Client() {
   if (!config.googleClientId || !config.googleClientSecret) {
@@ -35,6 +36,44 @@ export async function getCalendarClient(credentialsJson: string) {
   return calendar;
 }
 
+/** Format a Date as local ISO in the given IANA timezone (e.g. Asia/Jakarta). */
+function toLocalISO(d: Date, timeZone: string): string {
+  const s = d.toLocaleString('sv-SE', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+  return s.replace(' ', 'T');
+}
+
+/**
+ * Normalize event times for Calendar API:
+ * - If the LLM sent UTC (e.g. ...Z), convert to local time in calendarTimezone so the event shows at the right local time.
+ * - If end <= start, set end to start + 1 hour.
+ */
+function normalizeEventTimes(
+  startTime: string,
+  endTime: string,
+  timeZone: string
+): { startDateTime: string; endDateTime: string } {
+  const parse = (s: string): Date => new Date(s.trim());
+  const toLocal = (d: Date) => toLocalISO(d, timeZone);
+  let start = parse(startTime);
+  let end = parse(endTime);
+  if (end.getTime() <= start.getTime()) {
+    end = new Date(start.getTime() + DEFAULT_DURATION_MS);
+  }
+  return {
+    startDateTime: toLocal(start),
+    endDateTime: toLocal(end),
+  };
+}
+
 export async function createCalendarEvent(
   credentialsJson: string,
   summary: string,
@@ -43,10 +82,12 @@ export async function createCalendarEvent(
   description?: string
 ): Promise<string> {
   const calendar = await getCalendarClient(credentialsJson);
+  const tz = config.calendarTimezone;
+  const { startDateTime, endDateTime } = normalizeEventTimes(startTime, endTime, tz);
   const event: { summary: string; description?: string; start: { dateTime: string; timeZone?: string }; end: { dateTime: string; timeZone?: string } } = {
     summary,
-    start: { dateTime: startTime, timeZone: 'UTC' },
-    end: { dateTime: endTime, timeZone: 'UTC' },
+    start: { dateTime: startDateTime, timeZone: tz },
+    end: { dateTime: endDateTime, timeZone: tz },
   };
   if (description) event.description = description;
   try {
