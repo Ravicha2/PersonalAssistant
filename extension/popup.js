@@ -33207,6 +33207,19 @@ ${content3}`;
         clearChatBtn.addEventListener("click", async () => {
           await setStoredChatHistory([]);
           messagesEl.innerHTML = "";
+          try {
+            const s = await getStoredSettings();
+            const token = getAuthToken(s);
+            if (s.backendUrl && token) {
+              await fetch(`${s.backendUrl}/v1/clear-chat`, {
+                method: "POST",
+                headers: {
+                  Authorization: "Bearer " + token
+                }
+              });
+            }
+          } catch {
+          }
           setStatus("Chat cleared.");
         });
         sendBtn.addEventListener("click", sendMessage);
