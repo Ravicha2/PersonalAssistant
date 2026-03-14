@@ -39,11 +39,24 @@ PersonalAssistant/
 6. MCP: connect servers, list/call tools, feed results back to Claude.
 7. Hardening: errors, rate limits, token usage, consent, security.
 
+## Quick start
+
+1. **Backend**
+   - `cd backend`, copy `.env.example` to `.env`, set `ANTHROPIC_API_KEY` and `BACKEND_API_KEY`.
+   - Run `npm install && npm run dev`. Server runs at `http://localhost:3000`.
+
+2. **Extension**
+   - In Chrome go to `chrome://extensions`, enable "Developer mode", click "Load unpacked", select the `extension` folder.
+   - Open the extension popup → Settings → set **Backend** URL and API key, then **LLM** provider (Claude / OpenAI / Groq), your **LLM API Key**, and **Model** → Save.
+
+3. **Use**
+   - Open the popup, optionally check "Include tab context", type a message and Send. Responses stream from Claude; MCP tools (mock echo/add) are available.
+
 ## Prerequisites
 
 - **Backend:** Anthropic API key (stored in backend env only). Optional: MCP servers.
-- **Extension:** Backend URL and, if used, backend API token (e.g. in extension options).
-- **Chrome:** Load unpacked extension from `extension/` (add placeholder icons under `extension/icons/` if needed).
+- **Extension:** Backend URL and backend API token in extension settings.
+- **Chrome:** Load unpacked extension from `extension/` folder.
 
 ---
 

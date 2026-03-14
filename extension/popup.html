@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Personal Assistant</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <h1>Personal Assistant</h1>
+      <button type="button" id="settings-btn" class="icon-btn" title="Settings">⚙️</button>
+    </header>
+
+    <div id="settings-panel" class="settings-panel hidden">
+      <h3 class="settings-section">Backend</h3>
+      <label>
+        Backend URL (e.g. http://localhost:3000)
+        <input type="text" id="backend-url" placeholder="http://localhost:3000" />
+      </label>
+      <label>
+        Backend API Key (auth token for this server)
+        <input type="password" id="api-key" placeholder="Your backend API key" />
+      </label>
+      <h3 class="settings-section">LLM (your API key & model)</h3>
+      <label>
+        Provider
+        <select id="llm-provider">
+          <option value="claude">Claude (Anthropic)</option>
+          <option value="openai">OpenAI</option>
+          <option value="groq">Groq</option>
+        </select>
+      </label>
+      <label>
+        LLM API Key
+        <input type="password" id="llm-api-key" placeholder="Your provider API key" />
+      </label>
+      <label>
+        Model
+        <input type="text" id="llm-model" placeholder="e.g. gpt-4o-mini, claude-sonnet-4-20250514" />
+      </label>
+      <div class="settings-actions">
+        <button type="button" id="save-settings">Save</button>
+        <button type="button" id="close-settings">Close</button>
+      </div>
+    </div>
+
+    <div class="chat-area">
+      <div id="messages" class="messages"></div>
+      <div class="input-row">
+        <label class="context-toggle">
+          <input type="checkbox" id="include-context" checked />
+          Include tab context
+        </label>
+        <div class="input-wrap">
+          <textarea id="input" rows="2" placeholder="Type a message..." maxlength="32000"></textarea>
+          <button type="button" id="send-btn" class="send-btn">Send</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="status" class="status"></div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
