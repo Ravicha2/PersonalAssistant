@@ -6,8 +6,17 @@ import type { McpClientInterface, McpTool } from './mcp.js';
 import type { ServerMessage } from './types.js';
 import { getAdapter, DEFAULT_MODELS, type LLMOptions, type UnifiedTool } from './llm/index.js';
 
-function buildSystemPrompt(context?: ContextPayload): string {
-  const base = `You are a helpful personal assistant for students. You have access to the user's browser context (open tabs as markdown) when provided. When the user has connected Google, you can: (1) create and list calendar events with create_calendar_event and list_calendar_events; (2) create a new Google Doc with create_google_doc (title and content). For "summarize this page and put it in a new doc": use the browser context to write the summary, then call create_google_doc. Do not create calendar events for document requests. The user's calendar timezone is ${CALENDAR_TZ}. For calendar events, convert user date/time to UTC and use ISO 8601 with Z; if the user does not specify event length, use 1 hour. You may also have additional tools from connected MCP servers (e.g. web search, time, tasks, notes, PDFs); use them when they fit the user's request. Be concise and accurate.`;
+function buildSystemPrompt(context?: ContextPayload, toolSummary = ''): string {
+  const base = `You are a helpful personal assistant for students. You have access to the user's browser context (open tabs as markdown) when provided.
+
+## Demo capabilities (use when the user asks)
+1. **Ask about the page** — Answer questions about the current page or open tabs using the browser context (titles, URLs, and markdown content). Be specific and cite the page when relevant.
+2. **Summarize the page** — When asked to summarize a page or "this page", write a clear summary from the browser context. Do not invent content that is not in the context.
+3. **Calendar (deadlines, events)** — When Google Workspace MCP is connected and the user mentions deadlines, due dates, or events, use the calendar tools (e.g. create_calendar_event, list_calendar_events) if available. Timezone: ${CALENDAR_TZ}. Use ISO 8601 UTC; default 1 hour if not specified.
+4. **Put summary in Google Docs** — When Google Workspace MCP is connected and the user wants a summary (or any text) in a Google Doc, use create_google_doc (or the MCP’s doc tool) with a clear title and full content. For "summarize this page and put it in a doc": first write the summary from the browser context, then call the doc tool. Do not create calendar events for document requests.
+5. **Other tools** — Use any additional tools from connected MCP servers (e.g. time, web search, fetch, memory) when they fit the request.
+
+Be concise and accurate.${toolSummary}`;
   if (!context?.tabs?.length && !context?.closed_tabs?.length) return base;
   const parts = [base];
   if (context.tabs?.length) {
@@ -24,6 +33,12 @@ function buildSystemPrompt(context?: ContextPayload): string {
     }
   }
   return parts.join('');
+}
+
+function buildToolSummary(tools: McpTool[]): string {
+  if (tools.length === 0) return '';
+  const names = tools.map((t) => t.name).join(', ');
+  return `\n\n## Available tools (use when relevant)\n${names}.`;
 }
 
 function mcpToolToUnified(t: McpTool): UnifiedTool {
@@ -63,8 +78,8 @@ export async function runChatStream(
   send: (m: ServerMessage) => void,
   llmOptions: LLMOptions
 ): Promise<void> {
-  const systemPrompt = buildSystemPrompt(context);
   const tools = allowTools ? await mcpClient.listTools() : [];
+  const systemPrompt = buildSystemPrompt(context, buildToolSummary(tools));
   const unifiedTools = tools.map(mcpToolToUnified);
 
   const provider = llmOptions.provider ?? 'claude';

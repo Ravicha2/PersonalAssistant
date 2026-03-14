@@ -79,7 +79,7 @@ export const CONNECTOR_DEFINITIONS: Record<
   },
   google: {
     name: 'Google',
-    description: 'Calendar, Gmail, Drive (one sign-in for all)',
+    description: 'Calendar & Docs (per-user; use for multi-user when app is online)',
     needsApiKey: false,
   },
 };

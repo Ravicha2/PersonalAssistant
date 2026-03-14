@@ -15,10 +15,14 @@ export const config = {
   claudeModel: process.env.CLAUDE_MODEL ?? 'claude-sonnet-4-20250514',
   claudeMaxTokens: 4096,
   maxToolTurns: 5,
-  googleClientId: process.env.GOOGLE_CLIENT_ID ?? '',
-  googleClientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
+  /** Built-in Google (per-user OAuth): for Connectors → Google so each user has their own account. Required for multi-user online. */
+  googleClientId: process.env.GOOGLE_CLIENT_ID ?? process.env.GOOGLE_OAUTH_CLIENT_ID ?? '',
+  googleClientSecret: process.env.GOOGLE_CLIENT_SECRET ?? process.env.GOOGLE_OAUTH_CLIENT_SECRET ?? '',
   googleRedirectUri: process.env.GOOGLE_REDIRECT_URI ?? '',
-  /** Timezone for calendar events (e.g. Asia/Jakarta). Events are created in this timezone so "23:55" stays 23:55 for the user. */
+  /** For Google Workspace MCP only: use GOOGLE_OAUTH_CLIENT_ID if different from built-in. */
+  googleOAuthClientId: process.env.GOOGLE_OAUTH_CLIENT_ID ?? process.env.GOOGLE_CLIENT_ID ?? '',
+  googleOAuthClientSecret: process.env.GOOGLE_OAUTH_CLIENT_SECRET ?? process.env.GOOGLE_CLIENT_SECRET ?? '',
+  /** Timezone for calendar events (built-in and MCP). */
   calendarTimezone: process.env.CALENDAR_TIMEZONE ?? 'Asia/Jakarta',
   /** Optional JSON array of external MCP servers. Each: { "id": "brave", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-brave-search"], "env": { "BRAVE_API_KEY": "..." } }. */
   mcpServersJson: process.env.MCP_SERVERS_JSON ?? '',

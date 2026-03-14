@@ -1,7 +1,16 @@
 from config import CALENDAR_TIMEZONE, MAX_TOOL_TURNS
 
 def build_system_prompt(context=None):
-    base = f"""You are a helpful personal assistant for students. You have access to the user's browser context (open tabs as markdown) when provided. When the user has connected Google, you can: (1) create and list calendar events with create_calendar_event and list_calendar_events; (2) create a new Google Doc with create_google_doc (title and content). For "summarize this page and put it in a new doc": use the browser context to write the summary, then call create_google_doc. Do not create calendar events for document requests. The user's calendar timezone is {CALENDAR_TIMEZONE}. For calendar events, convert user date/time to UTC and use ISO 8601 with Z; if the user does not specify event length, use 1 hour. You may also have additional tools from connected MCP servers (e.g. web search, time, tasks, notes); use them when they fit the user's request. Be concise and accurate."""
+    base = f"""You are a helpful personal assistant for students. You have access to the user's browser context (open tabs as markdown) when provided.
+
+## Demo capabilities (use when the user asks)
+1. **Ask about the page** — Answer questions about the current page or open tabs using the browser context (titles, URLs, and markdown content). Be specific and cite the page when relevant.
+2. **Summarize the page** — When asked to summarize a page or "this page", write a clear summary from the browser context. Do not invent content that is not in the context.
+3. **Calendar (deadlines, events)** — When the user mentions deadlines, due dates, meetings, or things to put on the calendar, use create_calendar_event. Examples: "add my deadline next Friday", "remind me tomorrow at 9am", "block Tuesday 2pm for study". List events with list_calendar_events when asked. Timezone: {CALENDAR_TIMEZONE}. Convert user date/time to UTC and use ISO 8601 with Z; default event length 1 hour if not specified.
+4. **Put summary in Google Docs** — When the user wants a summary (or any text) saved as a Google Doc, use create_google_doc with a clear title and the full content. For "summarize this page and put it in a doc": first write the summary from the browser context, then call create_google_doc with that summary. Do not create calendar events for document requests.
+5. **Other tools** — Use any additional tools from connected MCP servers (e.g. time, web search, fetch, memory) when they fit the request.
+
+Be concise and accurate."""
     if not context or (not context.get("tabs") and not context.get("closed_tabs")):
         return base
     parts = [base]
@@ -31,11 +40,18 @@ def build_tool_result_messages(provider, tool_uses, results):
         return [{"role": "user", "content": [{"type": "tool_result", "tool_use_id": tu["id"], "content": results[i] or ""} for i, tu in enumerate(tool_uses)]}]
     return [{"role": "tool", "tool_call_id": tu["id"], "content": results[i] or ""} for i, tu in enumerate(tool_uses)]
 
+def _build_tool_summary(tools):
+    if not tools:
+        return ""
+    names = ", ".join(t.get("name", "") for t in tools)
+    return f"\n\n## Available tools (use when relevant)\n{names}."
+
+
 def run_chat_stream(message, context, allow_tools, mcp_client, send, llm_options):
     """Sync: run in thread. send(m) is sync and should e.g. queue.put_nowait(m)."""
     from llm import get_adapter, DEFAULT_MODELS
-    system_prompt = build_system_prompt(context)
     tools = mcp_client.list_tools() if allow_tools else []
+    system_prompt = build_system_prompt(context) + _build_tool_summary(tools)
     unified_tools = [mcp_tool_to_unified(t) for t in tools]
     provider = llm_options.get("provider", "claude")
     api_key = (llm_options.get("api_key") or "").strip()

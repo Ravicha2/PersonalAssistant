@@ -363,9 +363,9 @@ If WebSocket is not used:
 
 | Concern | Recommendation |
 |--------|----------------|
-| Language | **Node.js (TypeScript)** or **Python** — both have official Anthropic SDKs and MCP SDKs. |
-| Framework | **Node:** Fastify or Express. **Python:** FastAPI. Both support WebSocket and async. |
-| MCP | Official **@modelcontextprotocol/sdk** (TypeScript) or **mcp** (Python) for client. |
+| Language | **Python** — official Anthropic SDK and MCP-style stdio client in this repo. |
+| Framework | **FastAPI** — WebSocket, async, CORS for chrome-extension. |
+| MCP | Minimal stdio JSON-RPC client in `backend_py/_mcp_stdio.py`; optional official `mcp` (Python) package. |
 | Deployment | Container (Docker) on cloud (e.g. Fly.io, Railway, GCP Run, AWS ECS). Scale to zero if low traffic. |
 | Secrets | Env vars or cloud secret manager (e.g. GCP Secret Manager, AWS Secrets Manager). |
 

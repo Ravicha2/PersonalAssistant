@@ -1,61 +1,81 @@
-﻿# Demo checklist
+# Demo checklist
 
-Use this to verify the full flow for the Personal Assistant demo (signup → login → context → send message → Google → create event).
-
-## 1. People can sign up
-
-- Open the extension popup.
-- If not signed in, you see **Sign in to your account**.
-- Enter **Backend URL** (e.g. `http://localhost:3000`), **Email**, **Password** (min 6 characters).
-- Click **Create account**.
-- You should see the chat view and your email in the header.
-
-## 2. People can login
-
-- Log out (click **Log out** in the header), or use a new profile.
-- Enter Backend URL, email, password.
-- Click **Sign in**.
-- You should see the chat view and your email in the header.
-
-## 3. Successfully extract HTML into markdown
-
-- Open a few normal web pages (e.g. a news article) in other tabs.
-- In the extension, leave **Include tab context** checked.
-- Send any message (e.g. "What tabs do I have open?").
-- The assistant should refer to content from your open tabs (titles, URLs, or content). Context is collected by the extension (HTML → markdown) and sent with the message.
-
-## 4. Send message
-
-- Type a message and click **Send** (or Enter).
-- Ensure **Settings** has **LLM** configured: **Provider** (e.g. OpenAI or Groq), **LLM API Key**, **Model**.
-- You should get a streamed reply from the chosen LLM (OpenAI/Groq/Claude).
-
-## 5. Connect to Google
-
-- Click **Connectors** in the header.
-- Find **Google** (one sign-in for Calendar, Gmail, Drive) and click **Connect**.
-- **Option A – OAuth (recommended):** Click **Sign in with Google** in the modal. A new tab opens; sign in with Google and allow access. You should see “Google connected” and can close the tab.
-- **Option B – Manual:** Get a refresh token from [Google OAuth 2.0 Playground](https://developers.google.com/oauthplayground/) (use Calendar API v3 scope `https://www.googleapis.com/auth/calendar`), then paste the **Refresh token** in the modal and click **Connect**.
-- Backend must have `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REDIRECT_URI` (e.g. `http://localhost:3000/auth/google/callback`) in `.env` for OAuth.
-
-## 6. Successfully create a calendar event
-
-- With Google connected, send a message like: **“Create a calendar event tomorrow at 2pm called Team standup, 30 minutes.”**
-- The assistant should use the `create_calendar_event` tool and confirm the event was created (and optionally show a link).
-- Check [Google Calendar](https://calendar.google.com) to see the new event.
+Use this to verify the full **demo flow**: sign up → connect Google → **ask about the page** → **summarize the page** → **add deadlines to calendar** → **put summary in Google Docs**. All tools use **official MCP servers** where available; Google Calendar and Docs are built-in (single OAuth).
 
 ---
 
-## Backend setup for the demo
+## Prerequisites
 
-1. Copy `backend/.env.example` to `backend/.env`.
-2. Set at least:
-   - `BACKEND_API_KEY` (any secret string; optional if you only use sign-in).
-   - `JWT_SECRET` (e.g. `openssl rand -hex 32`).
-   - Your LLM key is set **in the extension** (Settings → LLM API Key), not in the backend.
-3. For Google OAuth, set:
-   - `GOOGLE_CLIENT_ID`
-   - `GOOGLE_CLIENT_SECRET`
-   - `GOOGLE_REDIRECT_URI=http://localhost:3000/auth/google/callback`
-4. Run: `cd backend && npm install && npm run dev`.
-5. Load the extension from the `extension` folder in Chrome and use the popup for sign-up, sign-in, connectors, and chat.
+1. **Backend:** `cd backend_py`, copy `.env.example` to `.env`, set `JWT_SECRET` and (for Google) `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI=http://localhost:3000/auth/google/callback`. Run `python main.py`.
+2. **Extension:** Load unpacked from `extension/`, sign in with Backend URL (e.g. `http://localhost:3000`), set **Settings → LLM** (provider, API key, model).
+3. **Google:** In the extension, go to **Connectors** → **Connect** Google (OAuth or refresh token). One connection enables both Calendar and Docs.
+
+---
+
+## 1. People can ask about the page
+
+- Open a web page you want to talk about (e.g. an article, a course page).
+- In the extension, leave **Include tab context** checked.
+- Ask about the page, e.g.:
+  - *"What is this page about?"*
+  - *"What are the main points on this tab?"*
+  - *"What tabs do I have open?"*
+- The assistant should answer using the **browser context** (titles, URLs, and content from your open tabs).
+
+---
+
+## 2. AI can summarize the page
+
+- With the same page open and **Include tab context** checked, ask:
+  - *"Summarize this page."*
+  - *"Give me a short summary of the content on this tab."*
+- The assistant should produce a summary **from the page content** in the context, without inventing details.
+
+---
+
+## 3. People can write deadlines / events into the calendar
+
+- With **Google** connected in Connectors, send messages like:
+  - *"Add to my calendar: project deadline next Friday at 5pm."*
+  - *"Create a calendar event tomorrow at 2pm called Team standup, 30 minutes."*
+  - *"Remind me Monday 9am – submit assignment."*
+- The assistant should use **create_calendar_event** and confirm the event. Check [Google Calendar](https://calendar.google.com) to see the new event.
+- You can also ask *"What’s on my calendar?"* to trigger **list_calendar_events**.
+
+---
+
+## 4. People can put the summary into Google Docs
+
+- With **Google** connected and **Include tab context** checked, ask:
+  - *"Summarize this page and put it in a new Google Doc called Research Summary."*
+  - *"Create a Google Doc named Lecture Notes with a summary of this page."*
+- The assistant should (1) summarize the page from the browser context, (2) call **create_google_doc** with that summary as the content, and (3) confirm with the doc link.
+
+---
+
+## 5. Tools: official MCP + built-in Google
+
+- **Official MCP servers** (add in **Connectors → Recommended for students** or **Search more MCP servers**):
+  - **Time** — `@modelcontextprotocol/server-time` (time/timezone; no key).
+  - **Brave Search** — `@modelcontextprotocol/server-brave-search` (web search; needs Brave API key).
+  - **Fetch** — `@modelcontextprotocol/server-fetch` (fetch URLs to markdown).
+  - **Memory** — `@modelcontextprotocol/server-memory` (persistent memory).
+  - **Filesystem** — `@modelcontextprotocol/server-filesystem` (local files).
+- **Google Calendar & Docs** — Built into the backend (single OAuth in Connectors). No separate MCP server; the backend calls Google APIs directly after you connect Google.
+
+---
+
+## Quick sign-up and login check
+
+- **Sign up:** Open popup → Backend URL, Email, Password → **Create account** → chat view and email in header.
+- **Login:** After logout → Backend URL, email, password → **Sign in** → same.
+
+---
+
+## Backend setup (reminder)
+
+1. Copy `backend_py/.env.example` to `backend_py/.env`.
+2. Set `JWT_SECRET`; optionally `BACKEND_API_KEY`. LLM API key is set in the **extension** (Settings).
+3. For Google OAuth: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI=http://localhost:3000/auth/google/callback`.
+4. Run: `cd backend_py && pip install -r requirements.txt && python main.py`.
+5. Load the extension and use the popup for sign-up, Connectors, and chat.

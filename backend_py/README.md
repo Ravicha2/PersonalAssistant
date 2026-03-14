@@ -1,6 +1,6 @@
 # Personal Assistant Backend (FastAPI)
 
-Python FastAPI backend with the same API as the Node backend so the Chrome extension works unchanged.
+Python FastAPI backend for the Personal Assistant Chrome extension: auth, Connectors (Google OAuth, MCP config), chat over WebSocket and SSE, and LLM + MCP tool orchestration.
 
 ## Setup
 
@@ -12,7 +12,7 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-Copy `../backend/.env` to `backend_py/.env` or set env vars (see `../backend/.env.example`).
+Copy `.env.example` to `.env` and set at least `JWT_SECRET` and optionally `BACKEND_API_KEY`, `ANTHROPIC_API_KEY`, and Google OAuth vars.
 
 ## Run
 
@@ -23,8 +23,18 @@ python main.py
 uvicorn main:app --host 0.0.0.0 --port 3000
 ```
 
-Server runs at `http://localhost:3000`. Use the same extension backend URL. Stop the Node backend first if it is running on port 3000, or set `PORT=3001` in `.env` to run both.
+Server runs at `http://localhost:3000`. Use this URL as the Backend URL in the extension.
 
 ## Data
 
-Uses the same file-based store as the Node backend. Set `DATA_DIR` to point to your existing `data/` (e.g. `DATA_DIR=../backend/data`) to share users, connectors, and MCP config.
+File-based store under `data/` (or `DATA_DIR` in `.env`): users, connectors (Google, Notion), MCP server config, and MCP tool manifests. No separate database required.
+
+## API
+
+- **Auth:** `POST /auth/register`, `POST /auth/login`
+- **User:** `GET /users/me`
+- **Connectors:** `GET/POST/DELETE /users/me/connectors`
+- **Google OAuth:** `GET /auth/google?token=...`, `GET /auth/google/callback`
+- **MCP:** `GET/PUT /api/mcp-servers/config`, `GET /api/mcp-servers` (registry)
+- **Chat:** `POST /v1/chat` (SSE), `WebSocket /ws?token=...`
+- **Health:** `GET /health`

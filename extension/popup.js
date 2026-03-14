@@ -59,18 +59,32 @@
   let settingsOpenedFromAuth = false;
 
   const STUDENT_MCP_PRESETS = [
-    { id: 'time', name: 'Time', description: 'Time and timezone conversion for deadlines and scheduling', config: { id: 'time', command: 'npx', args: ['-y', '@modelcontextprotocol/server-time'], env: {} } },
-    { id: 'brave-search', name: 'Brave Search', description: 'Web search (add BRAVE_API_KEY in Settings if needed)', config: { id: 'brave-search', command: 'npx', args: ['-y', '@modelcontextprotocol/server-brave-search'], env: {} } },
-    { id: 'filesystem', name: 'Filesystem', description: 'Read and write local files for notes and drafts', config: { id: 'filesystem', command: 'npx', args: ['-y', '@modelcontextprotocol/server-filesystem'], env: {} } },
-    { id: 'memory', name: 'Memory', description: 'Persistent memory for facts and preferences', config: { id: 'memory', command: 'npx', args: ['-y', '@modelcontextprotocol/server-memory'], env: {} } },
-    { id: 'fetch', name: 'Fetch', description: 'Fetch web pages and convert to markdown for research', config: { id: 'fetch', command: 'npx', args: ['-y', '@modelcontextprotocol/server-fetch'], env: {} } },
+    { id: 'google-workspace', name: 'Google Workspace', description: 'Community MCP · Calendar, Docs, Gmail, Drive. Set GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET in backend .env.', config: { id: 'google-workspace', command: 'npx', args: ['-y', '@alanxchen/google-workspace-mcp@1.0.2'], env: {} } },
+    { id: 'time', name: 'Time', description: 'Official MCP · Time and timezone conversion for deadlines and scheduling', config: { id: 'time', command: 'npx', args: ['-y', '@modelcontextprotocol/server-time'], env: {} } },
+    { id: 'brave-search', name: 'Brave Search', description: 'Official MCP · Web search (requires Brave API key)', config: { id: 'brave-search', command: 'npx', args: ['-y', '@modelcontextprotocol/server-brave-search'], env: {} }, needsEnv: true, envKey: 'BRAVE_API_KEY', envLabel: 'Brave API key' },
+    { id: 'filesystem', name: 'Filesystem', description: 'Official MCP · Read and write local files for notes and drafts', config: { id: 'filesystem', command: 'npx', args: ['-y', '@modelcontextprotocol/server-filesystem'], env: {} } },
+    { id: 'memory', name: 'Memory', description: 'Official MCP · Persistent memory for facts and preferences', config: { id: 'memory', command: 'npx', args: ['-y', '@modelcontextprotocol/server-memory'], env: {} } },
+    { id: 'fetch', name: 'Fetch', description: 'Official MCP · Fetch web pages and convert to markdown for research', config: { id: 'fetch', command: 'npx', args: ['-y', '@modelcontextprotocol/server-fetch'], env: {} } },
   ];
+  let pendingPresetConfig = null;
 
   function escapeHtml(s) {
     if (s == null) return '';
     const div = document.createElement('div');
     div.textContent = String(s);
     return div.innerHTML;
+  }
+
+  /** Renders assistant text so markdown links [text](url) become clickable; (#) and invalid URLs become plain text. */
+  function renderAssistantContent(text) {
+    if (text == null || text === '') return '';
+    const escaped = escapeHtml(text);
+    const placeholderLinkRegex = /\[([^\]]*)\]\((?!https?:\/\/)[^)]*\)/g;
+    const noPlaceholders = escaped.replace(placeholderLinkRegex, (_, label) => label || '');
+    const linkRegex = /\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)/g;
+    const withLinks = noPlaceholders.replace(linkRegex, (_, label, url) => '<a href="' + escapeHtml(url) + '" target="_blank" rel="noopener noreferrer">' + (label ? escapeHtml(label) : url) + '</a>');
+    const bareUrlRegex = /(https?:\/\/[^\s<]+)/g;
+    return withLinks.replace(bareUrlRegex, (url) => '<a href="' + escapeHtml(url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(url) + '</a>');
   }
 
   async function getMcpConfig() {
@@ -188,7 +202,11 @@
     roleLabel.textContent = role === 'user' ? 'You' : 'Assistant';
     const bubble = document.createElement('div');
     bubble.className = 'bubble';
-    bubble.textContent = content;
+    if (role === 'assistant') {
+      bubble.innerHTML = renderAssistantContent(content);
+    } else {
+      bubble.textContent = content;
+    }
     if (isStreaming) wrap.dataset.streaming = '1';
     body.appendChild(roleLabel);
     body.appendChild(bubble);
@@ -385,10 +403,31 @@
 
   let connectService = null;
   connectSubmit.addEventListener('click', async () => {
-    if (!connectService) return;
     const s = await getStoredSettings();
     if (!s.jwt) return;
     const key = connectApiKey.value.trim();
+
+    if (pendingPresetConfig) {
+      if (!key) return;
+      try {
+        const config = {
+          ...pendingPresetConfig.config,
+          env: { ...(pendingPresetConfig.config.env || {}), [pendingPresetConfig.envKey]: key },
+        };
+        await addMcpServer(config);
+        const name = pendingPresetConfig.name;
+        connectModal.classList.add('hidden');
+        connectApiKey.value = '';
+        pendingPresetConfig = null;
+        setStatus(`Connected ${name}. Added to your connectors.`);
+        loadConnectors();
+      } catch (e) {
+        setStatus(e.message || 'Connect failed', true);
+      }
+      return;
+    }
+
+    if (!connectService) return;
     if (!key) return;
     const body = connectService === 'google'
       ? { service: connectService, refresh_token: key }
@@ -415,6 +454,7 @@
   connectCancel.addEventListener('click', () => {
     connectModal.classList.add('hidden');
     connectService = null;
+    pendingPresetConfig = null;
   });
 
   async function loadConnectors() {
@@ -458,8 +498,10 @@
             if (c.service === 'google') {
               connectLabelText.textContent = 'Refresh token';
               connectApiKey.placeholder = 'Or use Sign in with Google below';
-              connectHint.innerHTML = 'Or <a href="#" id="google-oauth-link">Sign in with Google</a> to connect (opens in new tab).';
-              connectHint.classList.remove('hidden');
+              if (connectHint) {
+                connectHint.innerHTML = 'Or <a href="#" id="google-oauth-link">Sign in with Google</a> to connect (opens in new tab).';
+                connectHint.classList.remove('hidden');
+              }
               const oauthLink = document.getElementById('google-oauth-link');
               if (oauthLink) {
                 oauthLink.onclick = (e) => {
@@ -470,7 +512,7 @@
             } else {
               connectLabelText.textContent = 'API Key';
               connectApiKey.placeholder = 'Paste your API key';
-              connectHint.classList.add('hidden');
+              if (connectHint) connectHint.classList.add('hidden');
             }
             connectModal.classList.remove('hidden');
           }
@@ -509,6 +551,16 @@
             <button type="button" data-preset-id="${escapeHtml(preset.id)}">Connect</button>
           `;
           div.querySelector('button').addEventListener('click', async () => {
+            if (preset.needsEnv) {
+              pendingPresetConfig = preset;
+              connectModalTitle.textContent = `Connect ${preset.name}`;
+              connectLabelText.textContent = preset.envLabel || 'API key';
+              connectApiKey.value = '';
+              connectApiKey.placeholder = 'Paste your API key';
+              if (connectHint) connectHint.classList.add('hidden');
+              connectModal.classList.remove('hidden');
+              return;
+            }
             try {
               await addMcpServer(preset.config);
               setStatus(`Connected ${preset.name}. Added to your connectors.`);
@@ -691,8 +743,10 @@
         }
         if (msg.type === 'done') {
           if (currentBubble) {
+            const finalText = currentBubble.textContent;
+            currentBubble.innerHTML = renderAssistantContent(finalText);
             currentBubble.dataset.streaming = '';
-            persistMessage('assistant', currentBubble.textContent);
+            persistMessage('assistant', finalText);
           }
           setStatus(msg.usage ? `Done. Tokens: ${msg.usage.input_tokens + msg.usage.output_tokens}` : 'Done.');
         }

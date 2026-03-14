@@ -32,7 +32,21 @@ except Exception:
     GOOGLE_CONFIGURED = False
 
 app = FastAPI(title="Personal Assistant Backend")
-app.add_middleware(CORSMiddleware, allow_origins=ALLOWED_ORIGINS if "*" not in ALLOWED_ORIGINS else ["*"], allow_credentials=True)
+
+# CORS: WebSocket from chrome-extension often gets 403 with allow_credentials=True + wildcard.
+# Use explicit origins + regex so extension and localhost are allowed; credentials True for cookies if needed.
+_origins = [o.strip() for o in ALLOWED_ORIGINS if o and isinstance(o, str) and "*" not in o.strip()]
+if not _origins:
+    _origins = ["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001", "http://127.0.0.1:3001"]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_origins,
+    allow_origin_regex=r"chrome-extension://.*|https?://(localhost|127\.0\.0\.1)(:\d+)?",
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["*"],
+)
 
 def validate_legacy_api_key(token: str) -> bool:
     return bool(BACKEND_API_KEY and token == BACKEND_API_KEY)
@@ -262,29 +276,33 @@ async def v1_chat(request: Request, body: ChatBody):
 
 
 # ----- WebSocket -----
+def _ws_verify_token(token: str) -> tuple[bool, str | None]:
+    """Verify token; return (ok, user_id or None)."""
+    if not (token and token.strip()):
+        return False, None
+    if validate_legacy_api_key(token):
+        return True, None
+    decoded = decode_token(token)
+    if decoded:
+        return True, decoded.get("userId")
+    return False, None
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket):
-    await websocket.accept()
+    # Validate token BEFORE accept; use HTTP 401 denial instead of websocket.close (403)
     token = (websocket.query_params.get("token") or "").strip()
-    user_id = None
+    ok, user_id = _ws_verify_token(token)
+    if not ok:
+        from starlette.responses import Response
+        await websocket.send_denial_response(Response(status_code=401, content=b"Unauthorized"))
+        return
+    await websocket.accept()
+    user_id = user_id or (decode_token(token) or {}).get("userId") if token else None
+    _uid = user_id  # mutable ref for auth re-login
+
     def send(msg):
         import asyncio
         asyncio.create_task(websocket.send_json(msg))
-    def verify(t):
-        nonlocal user_id
-        if not t:
-            return False
-        if validate_legacy_api_key(t):
-            return True
-        decoded = decode_token(t)
-        if decoded:
-            user_id = decoded.get("userId")
-            return True
-        return False
-    if not verify(token):
-        await websocket.send_json({"type": "error", "code": "unauthorized", "message": "Sign in or provide a valid API key"})
-        await websocket.close()
-        return
     await websocket.send_json({"type": "auth_ok"})
     while True:
         try:
@@ -293,7 +311,10 @@ async def websocket_endpoint(websocket):
         except Exception:
             break
         if msg.get("type") == "auth":
-            if verify(msg.get("token", "")):
+            auth_ok, auth_uid = _ws_verify_token(msg.get("token", "") or "")
+            if auth_ok:
+                if auth_uid:
+                    _uid = auth_uid
                 await websocket.send_json({"type": "auth_ok"})
             else:
                 await websocket.send_json({"type": "error", "code": "unauthorized", "message": "Invalid token"})
@@ -311,7 +332,7 @@ async def websocket_endpoint(websocket):
             if len(message) > MAX_MESSAGE_LENGTH:
                 await websocket.send_json({"type": "error", "code": "bad_request", "message": "Message too long"})
                 continue
-            mcp_client = create_mcp_client(user_id)
+            mcp_client = create_mcp_client(_uid)
             provider = msg.get("provider") or "claude"
             api_key = (msg.get("api_key") or "").strip() or ANTHROPIC_API_KEY
             model = (msg.get("model") or "").strip() or DEFAULT_MODELS.get(provider, "")
@@ -337,6 +358,6 @@ if __name__ == "__main__":
     if not ANTHROPIC_API_KEY:
         print("ANTHROPIC_API_KEY is not set; Claude will need per-request api_key from extension.")
     if not BACKEND_API_KEY:
-        print("BACKEND_API_KEY is not set; WebSocket auth will reject all connections.")
+        print("BACKEND_API_KEY is not set; use sign-in (JWT) in the extension for WebSocket auth.")
     print(f"Server listening on http://0.0.0.0:{PORT}; WebSocket at ws://localhost:{PORT}/ws")
     uvicorn.run(app, host="0.0.0.0", port=PORT)

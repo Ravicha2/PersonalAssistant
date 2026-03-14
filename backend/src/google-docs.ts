@@ -3,10 +3,15 @@ import { config } from './config.js';
 
 function getOAuth2Client() {
   if (!config.googleClientId || !config.googleClientSecret) {
-    throw new Error('GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set for Google');
+    throw new Error('GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set for built-in Google');
   }
-  const redirectUri = config.googleRedirectUri || `http://localhost:${config.port}/auth/google/callback`;
-  return new google.auth.OAuth2(config.googleClientId, config.googleClientSecret, redirectUri);
+  const redirectUri =
+    config.googleRedirectUri || `http://localhost:${config.port}/auth/google/callback`;
+  return new google.auth.OAuth2(
+    config.googleClientId,
+    config.googleClientSecret,
+    redirectUri
+  );
 }
 
 export async function createGoogleDoc(
@@ -14,23 +19,21 @@ export async function createGoogleDoc(
   title: string,
   content: string
 ): Promise<string> {
-  let cred: { refresh_token: string };
-  try {
-    cred = JSON.parse(credentialsJson) as { refresh_token: string };
-  } catch {
+  const cred = JSON.parse(credentialsJson) as { refresh_token?: string };
+  const refreshToken = cred.refresh_token;
+  if (!refreshToken) {
     throw new Error('Invalid Google credentials');
   }
-  if (!cred.refresh_token) throw new Error('Missing refresh_token');
   const oauth2 = getOAuth2Client();
-  oauth2.setCredentials({ refresh_token: cred.refresh_token });
+  oauth2.setCredentials({ refresh_token: refreshToken });
   const docs = google.docs({ version: 'v1', auth: oauth2 });
-
   const createRes = await docs.documents.create({
     requestBody: { title: title || 'Untitled' },
   });
   const documentId = createRes.data.documentId;
-  if (!documentId) throw new Error('Failed to create document');
-
+  if (!documentId) {
+    throw new Error('Failed to create document');
+  }
   if (content && content.trim()) {
     await docs.documents.batchUpdate({
       documentId,
@@ -46,7 +49,6 @@ export async function createGoogleDoc(
       },
     });
   }
-
   const link = `https://docs.google.com/document/d/${documentId}/edit`;
   return `Document created: "${title}". View: ${link}`;
 }

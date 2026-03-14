@@ -1,35 +1,57 @@
 # External MCP Servers for Students (Research Summary)
 
-This doc lists **external MCP (Model Context Protocol) servers** that are especially useful for a **student-focused personal assistant**: calendar, docs, **NotebookLM**, notes, tasks, search, PDFs, and knowledge tracking. The backend **integrates** them: set `MCP_SERVERS_JSON` and the assistant gets all their tools (built-in Google + external) in one place.
+This doc lists **external MCP (Model Context Protocol) servers** that are especially useful for a **student-focused personal assistant**: calendar, docs, **NotebookLM**, notes, tasks, search, PDFs, and knowledge tracking. The backend **integrates** them: add MCP servers in Connectors (per-user config in `data/mcp-servers.json`).
+
+---
+
+## Multi-user / when the app is online
+
+If you deploy this app so **many people** use it (e.g. students at a school), each person should get **their own** Google Calendar and Docs. Use **built-in Google** for that:
+
+1. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in the backend `.env` (OAuth 2.0 Desktop app in Google Cloud; enable Calendar and Docs APIs).
+2. Each user opens **Connectors** in the extension and clicks **Connect** on **Google**, then **Sign in with Google**. Their refresh token is stored per user in the backend.
+3. The assistant then uses that user’s token for calendar and doc tools — so each person sees only their own data.
+
+The **Google Workspace MCP** (community) stores credentials in a single path per server, so it effectively gives **one Google account per backend**. Use it for single-user or self-hosted; for multi-user online, use built-in Google above.
+
+---
+
+## Config in data/, registry vs PulseMCP
+
+- **Google (Calendar, Docs):** **When the app is online for multiple users**, use **Connectors → Google** (built-in OAuth). Each user signs in with their own Google account; tokens are stored per user so everyone gets their own Calendar and Docs. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in the backend `.env`. **Alternatively**, for single-user or self-hosted, add the **Google Workspace** MCP preset in Connectors (community server `@alanxchen/google-workspace-mcp`); that MCP uses one credentials file per server, so it does not scale to many users. **Other tools** are **external MCP**; we prefer **official** servers where available.
+- **Config in data/:** MCP server config is stored **per user** in `data/mcp-servers.json` (and optional fallback `MCP_SERVERS_JSON` in env). Tool manifests are persisted in `data/mcp-tool-manifests.json` after a successful connect.
+- **Registry vs PulseMCP:** The extension "Search more MCP servers" uses the **official MCP Registry**. **PulseMCP** is a separate directory; we do not call PulseMCP for search. Use the registry in-app; use PulseMCP in the browser to discover servers, then add them via Connectors.
+- **Tool context:** The backend injects available tool names into the system prompt and persists tool manifests when connecting so the model knows what to call.
 
 ---
 
 ## Integration (use everything in this project)
 
-The backend **already supports** external MCP servers. You don’t change code — you add config.
+The backend **already supports** external MCP servers. Prefer saving config in the app (Connectors → add MCP); env is optional fallback.
 
-1. **Set `MCP_SERVERS_JSON`** in `backend/.env` to a JSON array of server configs. Each entry:
+1. **Save MCP config in the app:** In the extension, open **Connectors** → use "Recommended for students" or "Search more MCP servers" → **Connect**. Config is stored in `data/mcp-servers.json` per user. For presets that need an API key (e.g. Brave Search), a modal asks for it.
+2. **Optional: `MCP_SERVERS_JSON`** in `backend/.env` (Node) or `backend_py/.env` (Python) as fallback. Each entry:
    - **`id`** (string): short name for this server (e.g. `brave`, `time`).
    - **`command`** (string): executable to run (e.g. `npx`, `node`, `python`).
    - **`args`** (array of strings, optional): arguments (e.g. `["-y", "@modelcontextprotocol/server-brave-search"]`).
    - **`env`** (object, optional): extra env vars (e.g. `{ "BRAVE_API_KEY": "your-key" }`).
 
-2. **Restart the backend.** On first chat that uses tools, the backend connects to each server (stdio), fetches `tools/list`, and merges them with built-in tools (Google Calendar, Google Docs, echo, add). Tool names from built-in take precedence; then external tools are added.
+3. **Restart the backend** if you changed env. On first chat that uses tools, the backend connects to each server (stdio), fetches `tools/list`, merges them with demo tools (echo, add), and saves each server's tool list to `data/mcp-tool-manifests.json`. The LLM system prompt includes "Available tools: …" so the model knows what's connected.
 
-3. **Example — Brave Search + Time (no keys for Time):**
+4. **Example — Brave Search + Time (no keys for Time):**
    ```bash
    # One line, no line breaks inside the JSON
    MCP_SERVERS_JSON=[{"id":"brave","command":"npx","args":["-y","@modelcontextprotocol/server-brave-search"],"env":{"BRAVE_API_KEY":"YOUR_BRAVE_KEY"}},{"id":"time","command":"npx","args":["-y","@modelcontextprotocol/server-time"]}]
    ```
    Get a Brave API key (free tier): [brave.com/search/api](https://brave.com/search/api).
 
-4. **Example — add Todo list MCP (student tasks):**
+5. **Example — add Todo list MCP (student tasks):**
    - Install/runnable: e.g. `npx -y todo-list-mcp` or clone [RegiByte/todo-list-mcp](https://github.com/regibyte/todo-list-mcp) and run with `node dist/index.js` (path in `args`).
    - Add one more object to the `MCP_SERVERS_JSON` array with `command` and `args` that start that server.
 
-5. **NotebookLM (Google):** Lets the assistant query your NotebookLM notebooks (sources, Q&A). Requires Python: `pip install notebooklm-mcp`, then `notebooklm-mcp init https://notebooklm.google.com/notebook/YOUR_ID` and a config file. Add to the array: `{"id":"notebooklm","command":"notebooklm-mcp","args":["--config","/path/to/notebooklm-config.json","server"]}`. See **NotebookLM** section below.
+6. **NotebookLM (Google):** Lets the assistant query your NotebookLM notebooks (sources, Q&A). Requires Python: `pip install notebooklm-mcp`, then `notebooklm-mcp init https://notebooklm.google.com/notebook/YOUR_ID` and a config file. Add to the array: `{"id":"notebooklm","command":"notebooklm-mcp","args":["--config","/path/to/notebooklm-config.json","server"]}`. See **NotebookLM** section below.
 
-6. **More servers** (Notion, Obsidian, PDF, Memory, etc.): same idea. Each runs as a separate process; the backend spawns them and aggregates their tools. See sections below for links and required env/keys.
+7. **More servers** (Notion, Obsidian, PDF, Memory, etc.): same idea. Each runs as a separate process; the backend spawns them and aggregates their tools. See sections below for links and required env/keys.
 
 ---
 
@@ -53,6 +75,8 @@ Useful for: class schedule, deadlines, email, assignments in Drive/Docs.
 | **Google Drive MCP** | Search/list Drive files, read content. (Official one is archived; community alternatives exist.) | [modelcontextprotocol/servers](https://github.com/modelcontextprotocol/servers) (archived), [mcpindex.net](https://mcpindex.net/en/mcpserver/modelcontextprotocol-server-google-drive) |
 
 **Note:** These use their own OAuth/credential setup. If you use one, you typically don’t need to implement Calendar/Docs in your backend — the MCP server exposes the tools.
+
+**Is there an official Google MCP for Docs/Calendar?** Google does not ship a standalone MCP for Workspace. For this app: use **Connectors → Google** (built-in) so **each user** has their own account when the app is online; or add the **Google Workspace** MCP preset for single-user/self-hosted (set `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` in `.env`).
 
 ---
 

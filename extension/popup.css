@@ -778,6 +778,11 @@ body {
   border-bottom-left-radius: 4px;
 }
 
+.message.assistant .bubble a {
+  color: var(--link-color, #1a73e8);
+  text-decoration: underline;
+}
+
 .message.tool .bubble {
   background: var(--tool-bg);
   border: 1px solid var(--tool-border);

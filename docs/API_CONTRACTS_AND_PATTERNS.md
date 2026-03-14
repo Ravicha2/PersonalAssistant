@@ -248,45 +248,9 @@ export type ServerMessage =
 
 ## 4. Backend Code Patterns
 
-### 4.1 WebSocket Handler (Pseudocode — Node/Fastify)
+### 4.1 WebSocket Handler (Python/FastAPI)
 
-```ts
-fastify.get('/ws', { websocket: true }, (socket, req) => {
-  let authenticated = false;
-  const token = new URL(req.url, 'http://x').searchParams.get('token');
-
-  function send(msg: ServerMessage) {
-    socket.send(JSON.stringify(msg));
-  }
-
-  socket.on('message', async (raw) => {
-    const msg = JSON.parse(raw.toString()) as ClientMessage;
-    if (msg.type === 'auth' && !authenticated) {
-      const ok = await validateToken(msg.token);
-      if (ok) {
-        authenticated = true;
-        send({ type: 'auth_ok' });
-      } else {
-        send({ type: 'error', code: 'unauthorized', message: 'Invalid token' });
-        socket.close();
-      }
-      return;
-    }
-    if (!authenticated && msg.type !== 'auth') {
-      send({ type: 'error', code: 'unauthorized', message: 'Authenticate first' });
-      return;
-    }
-    if (msg.type === 'ping') {
-      send({ type: 'pong' });
-      return;
-    }
-    if (msg.type === 'chat') {
-      await handleChatStream(msg, send);
-      return;
-    }
-  });
-});
-```
+The backend uses FastAPI: `@app.websocket("/ws")`. Token is read from `websocket.query_params.get("token")`. After `await websocket.accept()`, the handler validates the token (JWT or `BACKEND_API_KEY`), sends `{"type": "auth_ok"}`, then in a loop receives JSON messages. For `type: "auth"` it re-validates the token; for `type: "ping"` it sends `{"type": "pong"}`; for `type: "chat"` it runs the chat stream (orchestrator) and sends `text_delta`, `tool_use`, `tool_result`, `done` over the same WebSocket. See `backend_py/main.py` for the full implementation.
 
 ### 4.2 Claude Stream + Tool Loop (Pseudocode)
 

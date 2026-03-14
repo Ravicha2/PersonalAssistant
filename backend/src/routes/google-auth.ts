@@ -3,7 +3,6 @@ import { getAuthUrl } from '../calendar.js';
 import { setConnector, type ConnectorService } from '../store/connectors.js';
 import { google } from 'googleapis';
 import { config } from '../config.js';
-import { findUserById } from '../store/users.js';
 
 export async function registerGoogleAuthRoutes(fastify: FastifyInstance): Promise<void> {
   const googleConfigured = !!(config.googleClientId && config.googleClientSecret);
@@ -13,54 +12,56 @@ export async function registerGoogleAuthRoutes(fastify: FastifyInstance): Promis
 
   fastify.get<{ Querystring: { token?: string } }>('/auth/google', async (req, reply) => {
     if (!googleConfigured) {
-      return reply.status(503).type('text/html').send(
+      return reply.status(503).send(
         '<h1>Google OAuth not configured</h1><p>Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in the backend <code>.env</code> (see <code>backend/.env.example</code>), then restart the server.</p>'
       );
     }
-    const token = req.query.token?.trim();
+    const token = (req.query as { token?: string }).token;
     if (!token) {
       return reply.status(400).send('<h1>Missing token</h1><p>Open Connectors in the extension and click Connect on Google.</p>');
     }
-    let userId: string;
-    try {
-      const decoded = await fastify.jwt.verify(token) as { userId: string };
-      userId = String(decoded.userId);
-      const user = await findUserById(userId);
-      if (!user) return reply.status(401).send('<h1>Invalid token</h1>');
-    } catch {
-      return reply.status(401).send('<h1>Invalid or expired token</h1><p>Sign in again in the extension.</p>');
-    }
-    const state = Buffer.from(userId, 'utf-8').toString('base64url');
-    const url = getAuthUrl(state);
-    return reply.redirect(url, 302);
+    const state = Buffer.from(JSON.stringify({ token }), 'utf-8').toString('base64url');
+    const authUrl = await getAuthUrl(state);
+    return reply.redirect(authUrl);
   });
 
   fastify.get<{ Querystring: { code?: string; state?: string } }>('/auth/google/callback', async (req, reply) => {
     if (!googleConfigured) {
-      return reply.status(503).type('text/html').send(
+      return reply.status(503).send(
         '<h1>Google OAuth not configured</h1><p>Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in the backend .env, then restart the server.</p>'
       );
     }
-    const { code, state } = req.query;
+    const { code, state } = req.query as { code?: string; state?: string };
     if (!code || !state) {
       return reply.status(400).send('<h1>Missing code or state</h1>');
     }
-    let userId: string;
+    let token: string;
     try {
-      userId = Buffer.from(state as string, 'base64url').toString('utf-8');
+      const decoded = JSON.parse(Buffer.from(state, 'base64url').toString('utf-8')) as { token?: string };
+      token = decoded.token ?? '';
     } catch {
       return reply.status(400).send('<h1>Invalid state</h1>');
     }
+    if (!token) return reply.status(400).send('<h1>Invalid state</h1>');
     const redirectUri = config.googleRedirectUri || `${req.protocol}://${req.hostname}:${String(config.port)}/auth/google/callback`;
     const oauth2 = new google.auth.OAuth2(config.googleClientId, config.googleClientSecret, redirectUri);
     const { tokens } = await oauth2.getToken(code);
-    if (!tokens.refresh_token) {
-      return reply.status(400).send('<h1>No refresh token</h1><p>Grant consent again and ensure prompt=consent is used.</p>');
+    const refreshToken = tokens.refresh_token;
+    if (!refreshToken) {
+      return reply.status(400).send('<h1>No refresh token</h1><p>Try again and ensure you complete the consent screen.</p>');
     }
-    const service: ConnectorService = 'google';
-    await setConnector(userId, service, JSON.stringify({ refresh_token: tokens.refresh_token }));
-    return reply.type('text/html').send(
-      '<!DOCTYPE html><html><head><title>Connected</title></head><body><h1>Google connected</h1><p>Calendar, Gmail, and Drive are now available. You can close this tab and return to the extension.</p></body></html>'
+    let userId: string;
+    try {
+      const decoded = await fastify.jwt.verify(token) as { userId?: string };
+      userId = decoded?.userId ?? '';
+    } catch {
+      return reply.status(401).send('<h1>Invalid or expired token</h1>');
+    }
+    if (!userId) return reply.status(401).send('<h1>Invalid token</h1>');
+    const credentials = JSON.stringify({ refresh_token: refreshToken });
+    await setConnector(userId, 'google' as ConnectorService, credentials);
+    return reply.send(
+      '<!DOCTYPE html><html><head><title>Connected</title></head><body><h1>Google connected</h1><p>Calendar and Docs are now available. You can close this tab and return to the extension.</p></body></html>'
     );
   });
 }

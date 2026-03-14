@@ -1,7 +1,7 @@
 /**
  * MCP client: list tools and call tools.
- * Built-in: Google (Calendar, Docs), echo, add.
- * External: from MCP_SERVERS_JSON (Brave Search, Time, Todo, etc.) — see docs/EXTERNAL_MCP_FOR_STUDENTS.md.
+ * Built-in: echo, add (demo); Google (Calendar, Docs) per-user via Connectors when GOOGLE_CLIENT_ID is set — use for multi-user online.
+ * External: Google Workspace MCP or other MCPs in Connectors.
  */
 
 import { getConnector } from './store/connectors.js';
@@ -23,13 +23,13 @@ export interface McpClientInterface {
 const CALENDAR_TOOLS: McpTool[] = [
   {
     name: 'create_calendar_event',
-    description: 'Create a new event on the user\'s Google Calendar. Pass start and end in ISO 8601 UTC (e.g. 2026-03-13T16:55:00Z). The server converts to the user\'s timezone. If the user does not specify duration, use 1 hour. endTime must be after startTime.',
+    description: 'Create a new event on the user\'s Google Calendar. Pass start and end in ISO 8601 UTC (e.g. 2026-03-13T16:55:00Z). If the user does not specify duration, use 1 hour. endTime must be after startTime.',
     inputSchema: {
       type: 'object',
       properties: {
         summary: { type: 'string', description: 'Event title' },
-        startTime: { type: 'string', description: 'Start datetime ISO 8601 UTC (e.g. 2026-03-13T16:55:00Z)' },
-        endTime: { type: 'string', description: 'End datetime ISO 8601 UTC; must be after startTime' },
+        startTime: { type: 'string', description: 'Start datetime ISO 8601 UTC' },
+        endTime: { type: 'string', description: 'End datetime ISO 8601 UTC' },
         description: { type: 'string', description: 'Optional event description' },
       },
       required: ['summary', 'startTime', 'endTime'],
@@ -38,21 +38,16 @@ const CALENDAR_TOOLS: McpTool[] = [
   {
     name: 'list_calendar_events',
     description: 'List upcoming events from the user\'s Google Calendar.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        maxResults: { type: 'number', description: 'Max events to return (default 10)' },
-      },
-    },
+    inputSchema: { type: 'object', properties: { maxResults: { type: 'number', description: 'Max events to return (default 10)' } } },
   },
   {
     name: 'create_google_doc',
-    description: 'Create a new Google Doc with the given title and body content. Use this when the user asks to summarize a page and put it in a doc, or to create a document with specific content. The content is the full body text (e.g. a summary).',
+    description: 'Create a new Google Doc with the given title and body content. Use when the user asks to put a summary or text in a doc.',
     inputSchema: {
       type: 'object',
       properties: {
-        title: { type: 'string', description: 'Document title (e.g. "Research Summary")' },
-        content: { type: 'string', description: 'Full body text to put in the document' },
+        title: { type: 'string', description: 'Document title' },
+        content: { type: 'string', description: 'Full body text' },
       },
       required: ['title', 'content'],
     },
@@ -100,7 +95,6 @@ export class UserMcpClient implements McpClientInterface {
         return `Error creating event: ${e instanceof Error ? e.message : String(e)}`;
       }
     }
-
     if (name === 'list_calendar_events' && this.calendarCredentials) {
       const maxResults = typeof args.maxResults === 'number' ? args.maxResults : 10;
       try {
@@ -109,7 +103,6 @@ export class UserMcpClient implements McpClientInterface {
         return `Error listing events: ${e instanceof Error ? e.message : String(e)}`;
       }
     }
-
     if (name === 'create_google_doc' && this.calendarCredentials) {
       const title = String(args.title ?? '').trim();
       const content = String(args.content ?? '').trim();
@@ -124,14 +117,12 @@ export class UserMcpClient implements McpClientInterface {
     const externalHas = await hasExternalTool(this.userId, name);
     if (externalHas) return callExternalTool(this.userId, name, args);
 
-    return `Tool "${name}" is not available. Connect Google in Connectors for Calendar/Docs, or add external MCP servers via MCP_SERVERS_JSON.`;
+    return `Tool "${name}" is not available. Connect Google in Connectors (for your own account when app is online) or add Google Workspace MCP.`;
   }
 }
 
 export async function createMcpClient(userId?: string | null): Promise<McpClientInterface> {
-  if (!userId) {
-    return new UserMcpClient('', null);
-  }
+  if (!userId) return new UserMcpClient('', null);
   const googleConn = await getConnector(userId, 'google');
   const googleCredentials = googleConn?.credentials ?? null;
   return new UserMcpClient(userId, googleCredentials);

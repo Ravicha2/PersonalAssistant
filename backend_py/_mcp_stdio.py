@@ -92,6 +92,11 @@ def ensure_connected(user_id: str):
                 name = t.get("name")
                 if name and name not in tool_to_server:
                     tool_to_server[name] = conn
+            try:
+                from store.mcp_tool_manifests import save_mcp_tool_manifest
+                save_mcp_tool_manifest(user_id, cfg.get("id", "unknown"), conn["tools"])
+            except Exception as e:
+                print(f"[MCP] Failed to save tool manifest for {cfg.get('id', '?')}: {e}")
     _cache_by_user[user_id] = {"servers": servers, "tool_to_server": tool_to_server}
 
 def get_tools_from_cache(user_id: str) -> list[dict]:

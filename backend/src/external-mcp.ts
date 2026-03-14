@@ -5,8 +5,9 @@
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { getMcpServersConfig } from './config.js';
+import { config, getMcpServersConfig } from './config.js';
 import { getMcpServersConfigForUser } from './store/mcp-servers.js';
+import { saveMcpToolManifest } from './store/mcp-tool-manifests.js';
 import type { McpServerConfig } from './config.js';
 import type { McpTool } from './mcp.js';
 
@@ -27,12 +28,21 @@ function mcpApiToolToOur(t: { name: string; description?: string; inputSchema?: 
   };
 }
 
+function buildEnv(serverConfig: McpServerConfig): Record<string, string> {
+  const env = { ...process.env, ...(serverConfig.env ?? {}) } as Record<string, string>;
+  if (serverConfig.id === 'google-workspace') {
+    if (config.googleOAuthClientId) env.GOOGLE_OAUTH_CLIENT_ID = config.googleOAuthClientId;
+    if (config.googleOAuthClientSecret) env.GOOGLE_OAUTH_CLIENT_SECRET = config.googleOAuthClientSecret;
+  }
+  return env;
+}
+
 async function connectServer(serverConfig: McpServerConfig): Promise<ConnectedServer | null> {
   try {
     const transport = new StdioClientTransport({
       command: serverConfig.command,
       args: serverConfig.args ?? [],
-      env: serverConfig.env,
+      env: buildEnv(serverConfig),
     });
     const client = new Client(
       { name: 'personal-assistant-backend', version: '1.0.0' },
@@ -66,6 +76,9 @@ async function ensureConnected(userId: string): Promise<{ servers: ConnectedServ
       for (const t of s.tools) {
         if (!toolToServer.has(t.name)) toolToServer.set(t.name, s);
       }
+      saveMcpToolManifest(userId, cfg.id, s.tools).catch((e) =>
+        console.warn('[MCP] Failed to save tool manifest for', cfg.id, e)
+      );
     }
   }
   const entry = { servers, toolToServer };

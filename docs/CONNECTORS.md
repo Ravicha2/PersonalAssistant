@@ -14,7 +14,7 @@ In this project the backend implements **its own** Google tools (Calendar, Docs)
 - Lists known integrations (e.g. Brave Search, NotebookLM, Todo, Time) with a toggle and one field each (API key, config path, etc.),
 - Builds the correct `MCP_SERVERS_JSON` for you and either shows it to **copy into `.env`** or, if the backend supports it, **saves it** so you don’t touch JSON at all.
 
-So: **Claude also makes their own connectors**; we can get close to “easy and one-click” by adding a simple UI that generates (or persists) the MCP config instead of asking users to edit JSON. The doc [EXTERNAL_MCP_FOR_STUDENTS.md](EXTERNAL_MCP_FOR_STUDENTS.md) already has the building blocks; a future step is that wizard or settings screen.
+So: **Claude also makes their own connectors**; we can get close to “easy and one-click” by adding a simple UI that generates (or persists) the MCP config instead of asking users to edit JSON. See [EXTERNAL_MCP_FOR_STUDENTS.md](EXTERNAL_MCP_FOR_STUDENTS.md) for the Connectors UI, Google-first, config in data/, and registry vs PulseMCP.
 
 ---
 
@@ -60,10 +60,8 @@ In this project, external integrations are provided by **MCP (Model Context Prot
    Most are run as a separate process (e.g. Node or Python). You pass config (API keys, etc.) via env or config file. The server speaks MCP over stdio or SSE.
 
 3. **Connect the backend to the MCP server**  
-   The backend’s MCP client (see `backend/src/mcp.ts`) is currently a **mock**. To support real connectors:
-   - Use the official `@modelcontextprotocol/sdk` (or the Python `mcp` package) in the backend.
-   - Configure one or more MCP server processes (command line or URL for SSE).
-   - In the backend, call `list_tools()` and `call_tool()` against those servers and pass results back into the LLM conversation.
+   The backend’s MCP client (see `backend_py/` — Python FastAPI) has a working MCP client. To add more:
+   Add server config via the extension Connectors page or `MCP_SERVERS_JSON` in `backend_py/.env`. The backend spawns MCP processes (e.g. `npx -y @modelcontextprotocol/server-time`), calls `tools/list` and `tools/call`, and passes results back into the LLM.
 
 4. **No change needed in the extension**  
    The extension only sends the user message (and optional tab context) to the backend. The backend is responsible for calling the LLM and MCP. When you add real MCP servers, the model will start using those tools automatically; the popup can later be updated to show “Tools: Notion, Google Drive” (or similar) if the backend exposes that info.
