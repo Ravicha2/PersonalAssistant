@@ -35,6 +35,10 @@
   const llmModelEl = document.getElementById('llm-model');
   const saveSettingsBtn = document.getElementById('save-settings');
   const connectorsList = document.getElementById('connectors-list');
+  const mcpPresetsList = document.getElementById('mcp-presets-list');
+  const mcpSearchInput = document.getElementById('mcp-search-input');
+  const mcpSearchBtn = document.getElementById('mcp-search-btn');
+  const mcpResults = document.getElementById('mcp-results');
   const authBackendUrl = document.getElementById('auth-backend-url');
   const authEmail = document.getElementById('auth-email');
   const authPassword = document.getElementById('auth-password');
@@ -53,6 +57,66 @@
   const CHAT_HISTORY_KEY = 'chatHistory';
   const MAX_CHAT_ITEMS = 200;
   let settingsOpenedFromAuth = false;
+
+  const STUDENT_MCP_PRESETS = [
+    { id: 'time', name: 'Time', description: 'Time and timezone conversion for deadlines and scheduling', config: { id: 'time', command: 'npx', args: ['-y', '@modelcontextprotocol/server-time'], env: {} } },
+    { id: 'brave-search', name: 'Brave Search', description: 'Web search (add BRAVE_API_KEY in Settings if needed)', config: { id: 'brave-search', command: 'npx', args: ['-y', '@modelcontextprotocol/server-brave-search'], env: {} } },
+    { id: 'filesystem', name: 'Filesystem', description: 'Read and write local files for notes and drafts', config: { id: 'filesystem', command: 'npx', args: ['-y', '@modelcontextprotocol/server-filesystem'], env: {} } },
+    { id: 'memory', name: 'Memory', description: 'Persistent memory for facts and preferences', config: { id: 'memory', command: 'npx', args: ['-y', '@modelcontextprotocol/server-memory'], env: {} } },
+    { id: 'fetch', name: 'Fetch', description: 'Fetch web pages and convert to markdown for research', config: { id: 'fetch', command: 'npx', args: ['-y', '@modelcontextprotocol/server-fetch'], env: {} } },
+  ];
+
+  function escapeHtml(s) {
+    if (s == null) return '';
+    const div = document.createElement('div');
+    div.textContent = String(s);
+    return div.innerHTML;
+  }
+
+  async function getMcpConfig() {
+    const s = await getStoredSettings();
+    if (!s.jwt || !s.backendUrl) return [];
+    const res = await fetch(s.backendUrl + '/api/mcp-servers/config', { headers: { Authorization: 'Bearer ' + s.jwt } });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data.servers) ? data.servers : [];
+  }
+  async function addMcpServer(serverConfig) {
+    const s = await getStoredSettings();
+    if (!s.jwt || !s.backendUrl) throw new Error('Sign in to add MCP servers.');
+    const list = await getMcpConfig();
+    const id = serverConfig.id;
+    if (list.some((x) => x.id === id)) return;
+    list.push({ id: serverConfig.id, command: serverConfig.command, args: serverConfig.args || [], env: serverConfig.env || {} });
+    const r = await fetch(s.backendUrl + '/api/mcp-servers/config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + s.jwt },
+      body: JSON.stringify({ servers: list }),
+    });
+    if (!r.ok) {
+      const d = await r.json();
+      throw new Error(d.message || 'Failed to add');
+    }
+  }
+  async function removeMcpServer(serverId) {
+    const s = await getStoredSettings();
+    if (!s.jwt || !s.backendUrl) return;
+    const list = (await getMcpConfig()).filter((x) => x.id !== serverId);
+    await fetch(s.backendUrl + '/api/mcp-servers/config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + s.jwt },
+      body: JSON.stringify({ servers: list }),
+    });
+  }
+  function defaultConfigFromServer(server) {
+    const name = server.server?.name ?? 'unknown';
+    const id = name.replace(/[/.:]/g, '-').replace(/^\-+|\-+$/g, '').slice(0, 32);
+    const pkg = server.server?.packages?.[0];
+    if (pkg?.identifier && (pkg.runtimeHint === 'npx' || pkg.registryType === 'npm')) {
+      return { id, command: 'npx', args: ['-y', pkg.identifier], env: {} };
+    }
+    return { id, command: 'npx', args: ['-y', name], env: {} };
+  }
 
   function showChatPage() {
     headerChat.classList.remove('hidden');
@@ -357,21 +421,25 @@
     const s = await getStoredSettings();
     if (!s.jwt) return;
     try {
-      const res = await fetch(`${s.backendUrl}/users/me/connectors`, {
-        headers: { Authorization: `Bearer ${s.jwt}` },
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Failed to load');
+      const [connRes, mcpRes] = await Promise.all([
+        fetch(`${s.backendUrl}/users/me/connectors`, { headers: { Authorization: `Bearer ${s.jwt}` } }),
+        fetch(`${s.backendUrl}/api/mcp-servers/config`, { headers: { Authorization: `Bearer ${s.jwt}` } }),
+      ]);
+      const connData = await connRes.json();
+      const mcpList = mcpRes.ok ? (await mcpRes.json()).servers : [];
+      const mcpServers = Array.isArray(mcpList) ? mcpList : [];
+      const connectedMcpIds = new Set(mcpServers.map((x) => x.id));
+
       connectorsList.innerHTML = '';
-      (data.connectors || []).forEach((c) => {
+      (connData.connectors || []).forEach((c) => {
         const div = document.createElement('div');
         div.className = 'connector-item' + (c.connected ? ' connected' : '');
         div.innerHTML = `
           <div class="connector-info">
-            <strong>${c.name}</strong>
-            <span>${c.description || ''}</span>
+            <strong>${escapeHtml(c.name)}</strong>
+            <span>${escapeHtml(c.description || '')}</span>
           </div>
-          <button type="button" data-service="${c.service}" data-connected="${c.connected}">
+          <button type="button" data-service="${escapeHtml(c.service)}" data-connected="${c.connected}">
             ${c.connected ? 'Disconnect' : 'Connect'}
           </button>
         `;
@@ -409,10 +477,113 @@
         });
         connectorsList.appendChild(div);
       });
+      mcpServers.forEach((mcp) => {
+        const name = mcp.serverName || mcp.id;
+        const div = document.createElement('div');
+        div.className = 'connector-item connected';
+        div.innerHTML = `
+          <div class="connector-info">
+            <strong>${escapeHtml(name)}</strong>
+            <span>MCP server · extra tools</span>
+          </div>
+          <button type="button" data-mcp-id="${escapeHtml(mcp.id)}">Disconnect</button>
+        `;
+        div.querySelector('button').addEventListener('click', async () => {
+          await removeMcpServer(mcp.id);
+          setStatus('Disconnected.');
+          loadConnectors();
+        });
+        connectorsList.appendChild(div);
+      });
+
+      if (mcpPresetsList) {
+        mcpPresetsList.innerHTML = '';
+        STUDENT_MCP_PRESETS.filter((preset) => !connectedMcpIds.has(preset.id)).forEach((preset) => {
+          const div = document.createElement('div');
+          div.className = 'connector-item';
+          div.innerHTML = `
+            <div class="connector-info">
+              <strong>${escapeHtml(preset.name)}</strong>
+              <span>${escapeHtml(preset.description)}</span>
+            </div>
+            <button type="button" data-preset-id="${escapeHtml(preset.id)}">Connect</button>
+          `;
+          div.querySelector('button').addEventListener('click', async () => {
+            try {
+              await addMcpServer(preset.config);
+              setStatus(`Connected ${preset.name}. Added to your connectors.`);
+              loadConnectors();
+            } catch (e) {
+              setStatus(e.message || 'Connect failed', true);
+            }
+          });
+          mcpPresetsList.appendChild(div);
+        });
+      }
     } catch (e) {
-      connectorsList.innerHTML = `<p class="error">${e.message || 'Failed to load connectors'}</p>`;
+      connectorsList.innerHTML = `<p class="error">${escapeHtml(e.message || 'Failed to load connectors')}</p>`;
     }
   }
+
+  function renderMcpResultEntry(entry, append) {
+    const server = entry.server || {};
+    const title = server.title || server.name || 'Unnamed';
+    const desc = server.description || '';
+    const div = document.createElement('div');
+    div.className = 'connector-item mcp-result-item';
+    div.innerHTML = `
+      <div class="connector-info"><strong>${escapeHtml(title)}</strong><span>${escapeHtml(desc.slice(0, 120))}${desc.length > 120 ? '…' : ''}</span></div>
+      <button type="button" data-connect>Connect</button>
+    `;
+    div.querySelector('[data-connect]').addEventListener('click', async () => {
+      try {
+        const config = defaultConfigFromServer(entry);
+        await addMcpServer(config);
+        setStatus('Connected. Added to your connectors.');
+        loadConnectors();
+      } catch (e) {
+        setStatus(e.message || 'Connect failed', true);
+      }
+    });
+    if (append) mcpResults.appendChild(div); else mcpResults.insertBefore(div, mcpResults.querySelector('.mcp-load-more-wrap'));
+  }
+
+  async function searchMcpServers(cursor) {
+    const s = await getStoredSettings();
+    const q = (mcpSearchInput?.value ?? '').trim();
+    if (!cursor) mcpResults.innerHTML = '<p class="connectors-hint">Loading…</p>';
+    try {
+      let url = `${s.backendUrl}/api/mcp-servers?limit=25`;
+      if (cursor) url += '&cursor=' + encodeURIComponent(cursor);
+      if (q) url += '&search=' + encodeURIComponent(q);
+      const res = await fetch(url);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Search failed');
+      const servers = data.servers ?? [];
+      const nextCursor = data.metadata?.nextCursor || '';
+      if (!cursor) mcpResults.innerHTML = '';
+      servers.forEach((entry) => renderMcpResultEntry(entry, true));
+      const loadMoreWrap = mcpResults.querySelector('.mcp-load-more-wrap');
+      if (loadMoreWrap) loadMoreWrap.remove();
+      if (servers.length === 0 && !cursor) {
+        mcpResults.innerHTML = '<p class="connectors-hint">No servers found. Try another search or browse <a href="https://www.pulsemcp.com/servers" target="_blank" rel="noopener">PulseMCP</a>.</p>';
+        return;
+      }
+      if (nextCursor && !q) {
+        const wrap = document.createElement('div');
+        wrap.className = 'mcp-load-more-wrap';
+        wrap.style.cssText = 'padding:8px;text-align:center;';
+        wrap.innerHTML = '<button type="button" id="mcp-load-more-btn">Load more</button>';
+        wrap.querySelector('#mcp-load-more-btn').addEventListener('click', () => searchMcpServers(nextCursor));
+        mcpResults.appendChild(wrap);
+      }
+    } catch (e) {
+      mcpResults.innerHTML = `<p class="error">${escapeHtml(e.message || 'Search failed')}</p>`;
+    }
+  }
+
+  mcpSearchBtn?.addEventListener('click', () => searchMcpServers());
+  mcpSearchInput?.addEventListener('keydown', (e) => { if (e.key === 'Enter') searchMcpServers(); });
 
   clearChatBtn.addEventListener('click', async () => {
     await setStoredChatHistory([]);

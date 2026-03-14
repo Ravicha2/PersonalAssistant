@@ -132,8 +132,18 @@
 
       <div id="page-connectors" class="page page-connectors hidden">
         <div class="page-body">
-          <p class="connectors-hint">Connect your accounts. The assistant can use these when you chat.</p>
+          <h3 class="settings-section">Your connectors</h3>
+          <p class="connectors-hint">Connect accounts and MCP servers. Click Connect to add; it saves automatically.</p>
           <div id="connectors-list" class="connectors-list"></div>
+          <h3 class="settings-section mcp-section">Recommended for students</h3>
+          <p class="connectors-hint">One-click add these MCP servers (time, search, files, memory).</p>
+          <div id="mcp-presets-list" class="connectors-list"></div>
+          <h3 class="settings-section">Search more MCP servers</h3>
+          <div class="mcp-search-row">
+            <input type="text" id="mcp-search-input" placeholder="e.g. brave, time, filesystem" />
+            <button type="button" id="mcp-search-btn">Search</button>
+          </div>
+          <div id="mcp-results" class="mcp-results"></div>
         </div>
       </div>
     </div>
