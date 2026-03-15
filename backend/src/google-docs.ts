@@ -1,5 +1,6 @@
 import { google } from 'googleapis';
 import { config } from './config.js';
+import { markdownToDocsContent, buildFormatRequests } from './markdown-to-docs.js';
 
 function getOAuth2Client() {
   if (!config.googleClientId || !config.googleClientSecret) {
@@ -34,19 +35,22 @@ export async function createGoogleDoc(
   if (!documentId) {
     throw new Error('Failed to create document');
   }
-  if (content && content.trim()) {
+  const trimmed = content?.trim();
+  if (trimmed) {
+    const { plainText, ops } = markdownToDocsContent(trimmed);
+    const formatRequests = buildFormatRequests(ops);
+    const requests: object[] = [
+      {
+        insertText: {
+          location: { index: 1 },
+          text: plainText,
+        },
+      },
+      ...formatRequests,
+    ];
     await docs.documents.batchUpdate({
       documentId,
-      requestBody: {
-        requests: [
-          {
-            insertText: {
-              location: { index: 1 },
-              text: content.trim(),
-            },
-          },
-        ],
-      },
+      requestBody: { requests },
     });
   }
   const link = `https://docs.google.com/document/d/${documentId}/edit`;
