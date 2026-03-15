@@ -32,6 +32,8 @@ export type ClientMessage =
     message: string;
     context?: ContextPayload;
     allow_tools?: boolean;
+    /** When true, ask the model for concise, voice-friendly responses (short paragraphs, suitable for TTS). */
+    prefer_voice_response?: boolean;
     /** User's LLM provider (claude, openai, groq) and their API key + model */
     provider?: 'claude' | 'openai' | 'groq';
     api_key?: string;

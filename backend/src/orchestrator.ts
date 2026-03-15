@@ -12,7 +12,10 @@ export function clearChatHistory(): void {
   chatHistory = [];
 }
 
-function buildSystemPrompt(context?: ContextPayload, toolSummary = ''): string {
+function buildSystemPrompt(context?: ContextPayload, toolSummary = '', preferVoiceResponse = false): string {
+  const voiceGuidance = preferVoiceResponse
+    ? '\n\n**When responding for voice:** Keep answers concise and suitable for reading aloud. Use short paragraphs, avoid long code blocks or bullet lists; prefer 2–4 sentences per idea. Summaries should be clear when spoken.'
+    : '';
   const base = `You are a helpful personal assistant for students. You have access to the user's browser context (open tabs as markdown) when provided.
 
 ## Demo capabilities (use when the user asks)
@@ -20,9 +23,10 @@ function buildSystemPrompt(context?: ContextPayload, toolSummary = ''): string {
 2. **Summarize the page** — When asked to summarize a page or "this page", write a clear summary from the browser context. Do not invent content that is not in the context.
 3. **Calendar (deadlines, events)** — When Google Workspace MCP is connected and the user mentions deadlines, due dates, or events, use the calendar tools (e.g. create_calendar_event, list_calendar_events) if available. Timezone: ${CALENDAR_TZ}. Use ISO 8601 UTC; default 1 hour if not specified.
 4. **Put summary in Google Docs** — When Google Workspace MCP is connected and the user wants a summary (or any text) in a Google Doc, use create_google_doc (or the MCP’s doc tool) with a clear title and full content. For "summarize this page and put it in a doc": first write the summary from the browser context, then call the doc tool. Do not create calendar events for document requests.
-5. **Other tools** — Use any additional tools from connected MCP servers (e.g. time, web search, fetch, memory) when they fit the request.
+5. **Document parsing (Docling)** — When Docling or document-parsing tools are available, use them to parse PDFs, DOCX, PPTX, or URLs into markdown. Use the extracted content for summaries, study help, and answers. Prefer structured summaries (headings, short sections) when the source is a document.
+6. **Other tools** — Use any additional tools from connected MCP servers (e.g. time, web search, fetch, memory) when they fit the request.
 
-Be concise and accurate.${toolSummary}`;
+Be concise and accurate.${voiceGuidance}${toolSummary}`;
   if (!context?.tabs?.length && !context?.closed_tabs?.length) return base;
   const parts = [base];
   if (context.tabs?.length) {
@@ -82,10 +86,11 @@ export async function runChatStream(
   allowTools: boolean,
   mcpClient: McpClientInterface,
   send: (m: ServerMessage) => void,
-  llmOptions: LLMOptions
+  llmOptions: LLMOptions,
+  preferVoiceResponse = false
 ): Promise<void> {
   const tools = allowTools ? await mcpClient.listTools() : [];
-  const systemPrompt = buildSystemPrompt(context, buildToolSummary(tools));
+  const systemPrompt = buildSystemPrompt(context, buildToolSummary(tools), preferVoiceResponse);
   const unifiedTools = tools.map(mcpToolToUnified);
 
   const provider = llmOptions.provider ?? 'claude';

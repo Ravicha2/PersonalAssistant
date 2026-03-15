@@ -1,6 +1,6 @@
 /**
  * MCP client: list tools and call tools.
- * Built-in: echo, add (demo); Google (Calendar, Docs) per-user via Connectors when GOOGLE_CLIENT_ID is set — use for multi-user online.
+ * Built-in: echo, add (demo); Google (Calendar, Docs) per-user via Connectors; Docling (parse_document) when DOCLING_ENABLED=1.
  * External: Google Workspace MCP or other MCPs in Connectors.
  */
 
@@ -8,6 +8,7 @@ import { getConnector } from './store/connectors.js';
 import { createCalendarEvent, listCalendarEvents } from './calendar.js';
 import { createGoogleDoc } from './google-docs.js';
 import { listExternalTools, callExternalTool, hasExternalTool } from './external-mcp.js';
+import { isDoclingAvailable, convertToMarkdown } from './docling.js';
 
 export interface McpTool {
   name: string;
@@ -59,6 +60,21 @@ const MOCK_TOOLS: McpTool[] = [
   { name: 'add', description: 'Add two numbers', inputSchema: { type: 'object', properties: { a: { type: 'number' }, b: { type: 'number' } } } },
 ];
 
+const DOCLING_TOOLS: McpTool[] = [
+  {
+    name: 'parse_document',
+    description: 'Convert a document (PDF, DOCX, PPTX, HTML, etc.) to markdown using Docling. Pass a URL (e.g. https://example.com/doc.pdf) or an absolute file path. Use when the user wants to summarize, analyze, or answer questions about a document.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        url: { type: 'string', description: 'URL of the document (HTTP/HTTPS)' },
+        file_path: { type: 'string', description: 'Absolute path to the file on the server (alternative to url)' },
+      },
+      required: [],
+    },
+  },
+];
+
 export class UserMcpClient implements McpClientInterface {
   constructor(
     private userId: string,
@@ -68,6 +84,7 @@ export class UserMcpClient implements McpClientInterface {
   async listTools(): Promise<McpTool[]> {
     const tools = [...MOCK_TOOLS];
     if (this.calendarCredentials) tools.push(...CALENDAR_TOOLS);
+    if (isDoclingAvailable()) tools.push(...DOCLING_TOOLS);
     const builtInNames = new Set(tools.map((t) => t.name));
     const external = await listExternalTools(this.userId);
     for (const t of external) {
@@ -114,10 +131,23 @@ export class UserMcpClient implements McpClientInterface {
       }
     }
 
+    if (name === 'parse_document' && isDoclingAvailable()) {
+      const url = typeof args.url === 'string' ? args.url.trim() : '';
+      const filePath = typeof args.file_path === 'string' ? args.file_path.trim() : '';
+      const urlOrPath = url || filePath;
+      if (!urlOrPath) return 'Error: provide either "url" (document URL) or "file_path" (absolute path on server).';
+      try {
+        const markdown = await convertToMarkdown(urlOrPath);
+        return markdown.slice(0, 150_000) || '(No content extracted)';
+      } catch (e) {
+        return `Error parsing document: ${e instanceof Error ? e.message : String(e)}`;
+      }
+    }
+
     const externalHas = await hasExternalTool(this.userId, name);
     if (externalHas) return callExternalTool(this.userId, name, args);
 
-    return `Tool "${name}" is not available. Connect Google in Connectors (for your own account when app is online) or add Google Workspace MCP.`;
+    return `Tool "${name}" is not available. Connect Google in Connectors, enable Docling (DOCLING_ENABLED=1) for parse_document, or add external MCP servers.`;
   }
 }
 

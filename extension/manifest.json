@@ -10,7 +10,8 @@
     "storage"
   ],
   "optional_permissions": [
-    "history"
+    "history",
+    "microphone"
   ],
   "host_permissions": [
     "<all_urls>"

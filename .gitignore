@@ -6,9 +6,11 @@ backend/dist/
 backend/data/
 *.tsbuildinfo
 
-# Python (backend_py)
+# Python (backend_py, backend Docling venv)
 backend_py/.venv/
 backend_py/venv/
+backend/.venv/
+backend/venv/
 backend_py/__pycache__/
 backend_py/**/__pycache__/
 backend_py/*.py[cod]

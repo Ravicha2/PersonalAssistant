@@ -32665,7 +32665,8 @@
           { id: "brave-search", name: "Brave Search", description: "Official MCP \xB7 Web search (requires Brave API key)", config: { id: "brave-search", command: "npx", args: ["-y", "@modelcontextprotocol/server-brave-search"], env: {} }, needsEnv: true, envKey: "BRAVE_API_KEY", envLabel: "Brave API key" },
           { id: "filesystem", name: "Filesystem", description: "Official MCP \xB7 Read and write local files for notes and drafts", config: { id: "filesystem", command: "npx", args: ["-y", "@modelcontextprotocol/server-filesystem"], env: {} } },
           { id: "memory", name: "Memory", description: "Official MCP \xB7 Persistent memory for facts and preferences", config: { id: "memory", command: "npx", args: ["-y", "@modelcontextprotocol/server-memory"], env: {} } },
-          { id: "fetch", name: "Fetch", description: "Official MCP \xB7 Fetch web pages and convert to markdown for research", config: { id: "fetch", command: "npx", args: ["-y", "@modelcontextprotocol/server-fetch"], env: {} } }
+          { id: "fetch", name: "Fetch", description: "Official MCP \xB7 Fetch web pages and convert to markdown for research", config: { id: "fetch", command: "npx", args: ["-y", "@modelcontextprotocol/server-fetch"], env: {} } },
+          { id: "docling", name: "Docling", description: "Document parsing \xB7 PDF, DOCX, PPTX, HTML to markdown for summaries and study materials. Requires Python and uv (pip install uv).", config: { id: "docling", command: "uvx", args: ["--from=docling-mcp", "docling-mcp-server"], env: {} } }
         ];
         let pendingPresetConfig = null;
         function escapeHtml(s) {
@@ -33342,6 +33343,7 @@ ${content3}`;
                   message: text5,
                   context,
                   allow_tools: true,
+                  prefer_voice_response: document.getElementById("prefer-voice-response")?.checked === true,
                   provider: s.llmProvider,
                   api_key: s.llmApiKey,
                   model: s.llmModel

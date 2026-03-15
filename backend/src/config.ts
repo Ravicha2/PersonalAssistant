@@ -26,6 +26,10 @@ export const config = {
   calendarTimezone: process.env.CALENDAR_TIMEZONE ?? 'Asia/Jakarta',
   /** Optional JSON array of external MCP servers. Each: { "id": "brave", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-brave-search"], "env": { "BRAVE_API_KEY": "..." } }. */
   mcpServersJson: process.env.MCP_SERVERS_JSON ?? '',
+  /** Enable built-in Docling document parsing (PDF, DOCX, PPTX, HTML → markdown). Requires Python 3.10+ and `pip install docling`. */
+  doclingEnabled: process.env.DOCLING_ENABLED === '1' || process.env.DOCLING_ENABLED === 'true',
+  /** Python command to run the Docling conversion script (e.g. "python3", "python", or "uvx run docling" if using uv). */
+  doclingPythonPath: process.env.DOCLING_PYTHON_PATH ?? 'python3',
 } as const;
 
 export type McpServerConfig = {

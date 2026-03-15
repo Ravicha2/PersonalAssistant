@@ -57,13 +57,13 @@ async function main() {
   });
 
   fastify.post<{
-    Body: { id?: string; message?: string; context?: unknown; allow_tools?: boolean; provider?: LLMOptions['provider']; api_key?: string; model?: string };
+    Body: { id?: string; message?: string; context?: unknown; allow_tools?: boolean; prefer_voice_response?: boolean; provider?: LLMOptions['provider']; api_key?: string; model?: string };
   }>('/v1/chat', async (req, reply) => {
     const auth = await resolveAuth(req, reply);
     if (!auth.token) {
       return reply.status(401).send({ error: 'unauthorized', message: 'Sign in or provide a valid API key' });
     }
-    const { message, context, allow_tools, provider, api_key, model } = req.body ?? {};
+    const { message, context, allow_tools, prefer_voice_response, provider, api_key, model } = req.body ?? {};
     if (!message || typeof message !== 'string') {
       return reply.status(400).send({ error: 'bad_request', message: 'Missing or invalid message' });
     }
@@ -98,7 +98,8 @@ async function main() {
           const event = m.type === 'text_delta' ? 'text_delta' : m.type === 'tool_use' ? 'tool_use' : m.type === 'tool_result' ? 'tool_result' : m.type === 'done' ? 'done' : 'error';
           sendSSE(event, m);
         },
-        llmOptions
+        llmOptions,
+        prefer_voice_response === true
       );
     } catch (err) {
       sendSSE('error', { type: 'error', code: 'upstream_error', message: err instanceof Error ? err.message : String(err) });
@@ -189,7 +190,8 @@ async function main() {
               msg.allow_tools !== false,
               mcpClient,
               (m) => send(socket, m),
-              llmOptions
+              llmOptions,
+              msg.prefer_voice_response === true
             );
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
